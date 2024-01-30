@@ -1,0 +1,268 @@
+---
+title: "赠你一份'避鲨计'"
+author: "李柯毅"
+date: "2024-01-07"
+output: html_document
+---
+### **背景介绍**
+
+人类对陆地上的动物非常熟悉。我们不会走入狮子的领地，也不会去抚摸露出獠牙咆哮的狗。但人类对于海洋中的危险仍充满未知，海洋中的凶猛捕食者，如鲨鱼，经常对人类造成袭击和伤害。
+
+但事实上，大多数鲨鱼袭击都与捕食人类无关。环境的变化或领地入侵，都可能导致它们认为受到威胁从而做出应激性反应。此外，鲨鱼也表现出好奇心，可能会调查未知或不熟悉的物体，而这种行为通常是用嘴和牙齿完成的。
+
+所以，鲨鱼的"攻击"其实是极其罕见的事件，甚至比很多统计数据所显示的要小。当鲨鱼咬住冲浪板，即使冲浪者安然无恙，这也会被记录为"袭击"。人类与鲨鱼在低能见度水域的碰撞也被记录为"袭击"。
+
+因而，对于全球鲨鱼袭击事件的数据分析是至关重要的。第一，它可以帮助我们了解哪种水上活动更容易遭受鲨鱼攻击，以及哪些种类的鲨鱼是真正危险的，更应该远离。第二，通过时空数据的分析我们可以了解鲨鱼袭人事件随时间的变化，以及哪些水域是更危险的。这些分析可以帮助我们尽可能地避免受到鲨鱼的攻击，并教会我们在面对不同种类鲨鱼攻击时怎样保护自己。
+
+本次大作业我将对于全球鲨鱼袭击人类的数据进行分析。数据来源于网站"全球鲨鱼攻击档案(GSAF)"(<https://sharkattackfile.net>)，该网站由一群外科医生、法医创建，之后贡献者和用户迅速发展到包括海洋生物学家和鲨鱼行为学家。他们搜集了19世纪以来的各类鲨鱼袭击的报导，并实时调查和更新最新出现的鲨鱼袭击事件，最终将数据整理并发布在网站。该数据最早发布于1992年，之后持续更新至2020年，我选取的数据为网站最新版数据。
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(readr) 
+library(dplyr)
+library(reshape2)
+library(formattable)
+library(RColorBrewer)
+library(plotly)
+library(ggthemes)
+library(rworldmap)
+library(data.table)
+attacks <- read_csv("C:/Users/33549/Desktop/shark.csv")
+shark <- attacks # 备份
+```
+### 数据概览和清洗
+
+本数据集共包括16列，6462行样本。
+
+```{r, echo=FALSE}
+summary(attacks)
+```
+
+- 数据包括了袭击发生的时间、地点；被袭击人的姓名、性别、进行的水上活动及伤亡情况；鲨鱼的种类、袭击原因等。因数据所含变量较多，本研究主要聚焦于两部分：1.鲨鱼袭击的原因和伤亡情况（重点关注水上活动、伤亡情况和鲨鱼种类）；2.鲨鱼袭击的时空分布（重点关注时间、地点变量）。
+
+- 进一步观察数据，发现"伤亡情况"、"水上活动"、“鲨鱼种类”三列数据均为调查者描述中的词组或短句，格式较为混乱，需要进行清洗。于是我将含有某项伤害种类、活动名称的文本归为一类，难以归类的文本统一归为"其他"，"NA"单独成类，这样得到了较好的分类效果。对于鲨鱼种类，则依据网站中给出的最常见鲨鱼进行分类。此外我将死亡情况一列编码为0/1，并去掉模糊的项以便于后续操作。
+
+```{r  message=FALSE, warning=FALSE}
+
+attacks <- attacks %>%
+mutate(fatality=ifelse(`Fatal (Y/N)`=='Y',1,0))%>% #致死率0/1编码
+mutate(Injury_Type = ifelse(
+  is.na(Injury), "NA",
+  ifelse(grepl("bitten", Injury, ignore.case = T),"Bitten",
+  ifelse(grepl("Laceration", Injury, ignore.case = T), "Lacerations", 
+  ifelse(grepl("Minor injury", Injury, ignore.case = T), "Injured",
+  ifelse(grepl("No injury", Injury, ignore.case = T), "No Injury",
+  ifelse(grepl("Disappeared", Injury, ignore.case = T), "Disappeared",    
+  ifelse(grepl("Injured", Injury, ignore.case = T), "Injured",
+  ifelse(grepl("Injuries", Injury, ignore.case = T), "Injured",
+  ifelse(grepl("FATAL", Injury, ignore.case = T), "Fatal", "Others")))))))))) %>% #伤害情况分类清洗
+  
+mutate(Shark_Species = ifelse(
+  is.na(Species), "NA",
+  ifelse(grepl(".*White", Species, ignore.case = T),"White",
+  ifelse(grepl(".*tiger", Species, ignore.case = T), "Tiger", 
+  ifelse(grepl(".*BUll", Species, ignore.case = T), "Bull",
+  ifelse(grepl("reef", Species, ignore.case = T), "Gray Reef",
+  ifelse(grepl("nurse", Species, ignore.case = T), "Nurse",    
+  ifelse(grepl("lemon", Species, ignore.case = T), "Lemon",
+  ifelse(grepl("Wobbegong", Species, ignore.case = T), "Wobbegong",
+  ifelse(grepl("Blacktip", Species, ignore.case = T), "Blacktip",
+  ifelse(grepl("Blue", Species, ignore.case = T), "Blue", "Others"))))))))))) %>% #鲨鱼分类清洗
+  
+mutate(Activity_Type = ifelse(
+  is.na(Activity),"NA",
+  ifelse(grepl("Fishing", Activity, ignore.case = T), "Fishing",
+  ifelse(grepl("Bath.*", Activity, ignore.case = T), "Bathing",
+  ifelse(grepl("Wading", Activity, ignore.case = T), "Wading",
+  ifelse(grepl("Diving", Activity, ignore.case = T), "Diving",
+  ifelse(grepl("Surf.*", Activity, ignore.case = T),"Surfing",
+  ifelse(grepl("Swim.*", Activity, ignore.case = T), "Swimming", 
+  ifelse(grepl("Standing", Activity, ignore.case = T), "Standing",
+  ifelse(grepl("Snorkel+ing", Activity, ignore.case = T), "Snorkelling", "Others")))))))))) #水上活动情况分类清洗
+```
+
+### **数据分析和可视化**
+
+### PART 1 鲨鱼袭击影响因素分析
+
+#### Q1：哪些活动更易受到鲨鱼攻击？
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height=4}
+set.seed(100)
+attacks %>% #用ggplot2和管道函数绘制柱状图
+  count(Activity_Type, sort=TRUE) %>%
+  mutate(Activity_Type=reorder(Activity_Type,n))%>%
+  ggplot(aes(Activity_Type,n)) + #以活动类型和袭击数量为横纵坐标绘制
+  geom_bar(stat='identity',color='white') + 
+  coord_flip() +
+  geom_text(aes(label=n,hjust=-0.1)) + 
+  theme_economist() + 
+  ggtitle('Shark Attack by Activities') + 
+  labs(x = "Activity", y = "count")
+
+```
+
+- 从以上数据可以看出，受到鲨鱼袭击最多的水上活动是冲浪，钓鱼和游泳导致的袭击也较多。可能因为这些运动更容易进入较深的海域，同时因为在水的表面很难发现水下鲨鱼的踪迹。 
+
+- 此外，甚至有人在站立或日光浴的时候被攻击，虽然数量相对较少，但说明鲨鱼袭击不一定只发生在海水中，也可能在岸边。但最令我惊讶的是，浮潜（snorkelling）受到的鲨鱼袭击次数是最少的，而浮潜进入的海域却往往是最深的。对此我认为原因可能是，浮潜的人更容易发现鲨鱼，更容易躲避鲨鱼的袭击。也可能因为浮潜的人会携带较多设备，令鲨鱼感到畏惧而不敢攻击。
+
+
+
+#### Q2：鲨鱼袭击后人类受伤情况与活动种类的关系？
+
+```{r message=FALSE, warning=FALSE, fig.width=8, fig.height=4.6}
+# 使用geom_tile和管道函数，以交叉表的形式展现袭击数量和致死率的关系
+set.seed(100)
+attacks %>%
+  group_by(Activity_Type, Injury_Type) %>%
+  summarize(count = n(), fatality_rate = sum(fatality, na.rm = TRUE) / n()) %>%
+  
+  ggplot(aes(x = Activity_Type, y = Injury_Type, fill = count)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "viridis", direction = -1, alpha = 0.7) + # 颜色映射反转
+  ggtitle("Shark attack incidences by activity and injury type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  labs(fill = "Attack Count") + # 设置图例标签
+  geom_text(aes(label = scales::number(fatality_rate, accuracy = 0.01)),
+            vjust = 1.5) + # 在交叉表上添加致死率标签
+  guides(fill = guide_colorbar(title = "Attack Count")) + # 添加颜色图例
+  labs(fill = "Attack Count", caption = "Note: Numbers represent fatality rate") # 设置图例标签和注释
+
+```
+
+我进一步绘制了水上活动和受伤情况的交叉表。它主要基于热力图，并在其中加入了代表致死率的标签。图中横轴是活动类型，纵轴是受伤情况，网格颜色越深则代表报告的鲨鱼袭击数量越多；网格上的数字介于0-1，数字越大代表致死率越高。下面我们以受伤情况（纵轴）为基准观察，重点关注每行颜色最深的部分，即研究每种受伤情况更可能是由于什么活动造成的，并分析其中的原因：
+
+- ① 没有受伤的情况更多发生在钓鱼活动中。由此我们可以推断一些原因：其他活动如冲浪、游泳甚至站立，当人们报告说发现鲨鱼袭击时，更多是因为鲨鱼已经产生了攻击行为而导致伤害，这种伤害往往很难躲避。而钓鱼则不同，首先钓鱼者往往携带很多工具，如鱼叉、渔网，可以有效自卫并反击鲨鱼；其次鲨鱼袭击钓鱼者很多时候不是为了袭击人类，而是被人类捕获的海鲜吸引，很多时候人类可以将捕获品给与鲨鱼来避免受到攻击。所以钓鱼时受到鲨鱼袭击更可能不受到伤害。 
+- ②撕裂伤(lacerations)更多发生在冲浪活动中，且致死率很低。冲浪活动中人的速度较快，受到鲨鱼攻击后很容易引发撕裂。此外冲浪活动本身基数较大，也导致了撕裂伤害情况更多。撕裂伤害虽然很严重，但往往是局部的伤害，一般不会造成死亡，更多可能导致截肢。  
+- ③致命伤更多发生在游泳中。游泳的时候人可能会前往较深的水域，同时需要更多的精力关注自身动作，往往忽视周围情况。同时，游泳可以在任何水域进行，因而更可能前往危险水域。此外，即使游泳者发现了鲨鱼，也很难摆脱鲨鱼的追击，同时还可能因为挣扎和快速移动激发鲨鱼的杀戮欲，导致更高的死亡率。
+
+#### Q3：不同鲨鱼种类会造成多大伤害？
+```{r message=FALSE, warning=FALSE, fig.width=8, fig.height=4.6}
+set.seed(100)
+attack_shark_injury <- attacks %>% #利用管道函数和ggplot2绘制鲨鱼种类和伤害情况关系图
+  group_by(Shark_Species, Injury_Type)%>%
+  summarize(count=n(), fatality_rate=sum(fatality, na.rm=TRUE)/n()) #设置致死率公式
+attack_shark_injury%>%
+  ggplot(aes(Shark_Species, Injury_Type)) + #横纵坐标为鲨鱼种类和伤害类型
+  geom_point(aes(size = count, colour=fatality_rate)) + 
+#圆圈大小按照袭击数量设置
+  scale_colour_gradientn(colours=c("#88d8b0","#ff6f69")) + #设置致死率标签，颜色随致死率变化
+  ggtitle("Shark species and injury type") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme_economist() + theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+  theme(axis.title.y=element_blank(),axis.title.x=element_blank(), legend.position="right",legend.text = element_text(size = 8))
+
+# 该改进办法参考了网上的思路
+```
+
+- 此外，我还研究了不同鲨鱼种类与造成的伤害之间的关系。这里对于上面的交叉表做了一些改进，用圆圈大小展示鲨鱼袭击数量的多少，使得图像更直观。我们对比不同鲨鱼的情况可以发现，虎鲨、大白鲨相对造成了更多的致死，而黑鳍鲨（blacktip）、灰礁鲨（grey reef）、柠檬鲨、须鲨（Wobbegong）没有报导致死事件。
+
+- 查询更多资料发现，从体型上来看，大白鲨和虎鲨都属于大体型鲨鱼，其中大白鲨可以达到5.5米，而虎鲨平均体型也超过3m。此外，这两类鲨鱼都及其谨慎，具有很强的好奇心，因而它们往往对于环境变化（如人类的接触）会更敏感，容易产生强烈的攻击行为，所以产生了最多的致死事件。当然不排除另外一种可能，因为很多电影电视剧都涉及到鲨鱼食人往往都使用的是这两类鲨鱼，人类对于这两类鲨鱼更熟悉，鉴定死者被哪种鲨鱼杀死势更容易联想到这两类鲨鱼，因而导致它们致死率的提升。而黑鳍鲨、灰礁鲨、柠檬鲨、须鲨都属于中小型鲨鱼，往往攻击性较弱,人类逃脱的概率更高，受到致命伤的概率较小。(注：资料来源：https://sharkattackfile.net/species.htm#gray)
+
+- 进一步观察图像，可以发现在各类鲨鱼攻击中，致死都是很小一部分事件，大部分只是导致人受轻微伤。这表明，捕食人类不是鲨鱼的主要目的，它们发动攻击更可能是出于好奇或自卫，当观察到对方没有威胁时便会放其一马，不会一味置人于死地。
+
+- 此外我们也注意到，致死率一行中数量最多的是NA，即不知道何种鲨鱼攻击。这大概是因为，人只能从死者的伤口中判断是哪种鲨鱼，但大多数情况下这是很困难的，尤其是死者死状惨烈的时候。当然也有可能是旁观者目击了鲨鱼杀人的全过程，但往往距离较远难以清晰判定鲨鱼类型。因此大部分致死事件中鲨鱼类型空缺是合理的。
+
+
+### Part 2 鲨鱼袭击事件时空分析
+
+#### Q4 哪些国家鲨鱼袭击事件最多？
+
+```{r, message=FALSE, warning=FALSE}
+library(data.table)
+library(rworldmap)
+shark <- read.csv("C:/Users/33549/Desktop/shark.csv") #重新读一遍数据记为shark避免重复（用前面的备份数据总是报错，因而重读了一遍）
+```
+
+```{r, message=FALSE, warning=FALSE}
+shark$Fatal..Y.N.[shark$Fatal..Y.N.%in%c("","--M524--M3133Y")] <- "UNKNOWN"
+shark <- shark[!shark$Fatal..Y.N.=="UNKNOWN",] #去掉unknow的值
+shark$Fatal..Y.N.[!shark$Fatal..Y.N.=="Y"] <- "N" #不是Y的都设为N，处理缺失值
+shark$Fatal..Y.N. <- as.factor(as.character(shark$Fatal..Y.N.))
+shark$Fatal..Y.N. <- as.numeric(shark$Fatal..Y.N.=="Y")
+
+shark <- as.data.table(shark) 
+```
+
+- 鲨鱼袭击事件国家分布
+```{r, message=FALSE, warning=FALSE}
+Fatality <- shark[,.(.N,"Fatality_Rate"=100*mean(Fatal..Y.N.,na.rm = T)),by=.(Country)][order(-Fatality_Rate)]
+```
+
+```{r, include=FALSE}
+sPDF <- joinCountryData2Map(dF = Fatality,joinCode = "NAME",nameJoinColumn = "Country")
+```
+
+```{r, message=FALSE, warning=FALSE}
+set.seed(100)
+mapCountryData(
+  mapToPlot = sPDF,
+  nameColumnToPlot = "Fatality_Rate",
+  catMethod = "fixedWidth",
+  oceanCol = "steelblue1",
+  missingCountryCol = "white",
+  mapTitle = "Global Shark Fatality Rate",
+  aspect = "variable"
+)
+
+#地图绘制这里学习了r包的help文档，但没有找到特别好的加图例名的方式
+```
+
+
+- 大于10次袭击事件的国家
+```{r, results = 'asis'}
+Fatality <- Fatality[N>10,Fatality_Rate,by=Country]
+```
+
+```{r, include=FALSE}
+sPDF <- joinCountryData2Map(dF = Fatality,joinCode = "NAME",nameJoinColumn = "Country")
+```
+
+```{r, message=FALSE, warning=FALSE}
+set.seed(100)
+mapCountryData(
+  mapToPlot = sPDF,
+  nameColumnToPlot = "Fatality_Rate",
+  catMethod = "fixedWidth",
+  oceanCol = "steelblue1",
+  missingCountryCol = "white",
+  mapTitle = "Countries with more than 10 shark attacks",
+  aspect = "variable"
+)
+
+```
+
+- 通过观察以上鲨鱼袭击事件的空间分布，我们发现，鲨鱼袭击多出现在沿海的国家和地区，内陆国家几乎没有报导有鲨鱼袭击事件，这是符合常识的。
+- 具体对各大洋周围地区进行分析，发现印度洋和大西洋周围国家鲨鱼袭击致死率较高，但鲨鱼袭击事件总数较少。北美地区鲨鱼袭击事件总数较多，但致死率较低（可能由于该机构主要位于北美，更易收集到北美数据）。而印度和东南亚地区鲨鱼伤人总量和致死率都较高。而对于中国来说，鲨鱼袭击量和致死率都较低，可能因为中国人更服从管理，很少前往危险水域探险，此外政府对于水域的开发管理和人员保护工作比较到位。
+
+
+#### Q5 鲨鱼袭击次数和年份的关系？
+
+```{r message=FALSE, warning=FALSE, echo=FALSE, fig.width=6, fig.height=4}
+set.seed(100)
+attacks %>%
+  filter(Year>1800)%>% #从1800年开始画
+  group_by(Year, fatality)%>%
+  summarize(count=n())%>% 
+  ggplot(aes(Year,count, color=factor(fatality))) + #横纵坐标设置为年份和袭击数量（不同致死率下）
+  geom_point(size=1, alpha=0.6) + 
+  ggtitle("Shark Attack over the Years") + theme_economist() + scale_x_continuous(limits = c(1800, 2030)) + #年份选取为1800-2030
+  theme(legend.text = element_text(size = c(10, 10, 8))) + labs(color = "fatality") 
+```
+
+- 我们可以发现鲨鱼袭击时间在21世纪后有明显增加，但致死率增加不高。原因可能是21世纪进入信息时代后，信息传播更加便捷，鲨鱼全球攻击事件信息更容易被收集整理。例如，若某人被鲨鱼袭击但没有死亡，之前可能只有周围人知道，但现在他可以发到微博或短视频平台，这样该事件就能够被全球鲨鱼袭击文件收录，但如果鲨鱼袭击致死则信息依旧很难向外传递，导致数据显示的致死率并没有显著提升。
+- 但同时也有环境的因素，随着海洋污染和气候变暖，鲨鱼的栖息地受到威胁，并逐步向海岸靠近。鲨鱼与人类接触的概率更高，因而受到袭击的事件数量也有所增加。
+综上可以认为鲨鱼袭击人类事件随时间有部分增加，但增长情况并没有图中显示的那么陡峭。
+
+
+### **结论**
+
+通过上述分析，我们了解了鲨鱼袭击的很多规律和特点，由此可以给出一份“避鲨计”：
+
+- ①海中冲浪和游泳很危险，需要在安全水域，不要轻易前往未开发的深水区域，很多鲨鱼袭击事件都发生在冲浪和游泳活动中。但是，即使只是在岸边站立或日光浴也不能100%避免袭击。
+- ②小心大白鲨和虎鲨等凶猛捕食者，认清楚它们的样子，看到它们尽快逃离，不要犹豫。
+- ③在印度洋和大西洋等海域格外小心，在印度、东南亚等鲨鱼袭击多发地，尽量不要下海活动。至少要做好准备，时刻小心。
+- ④如果被鲨鱼袭击无法逃脱，那就保持冷静，鲨鱼大多数时候只是好奇，只要不过度挣扎很少对你造成致死伤害（大白鲨、虎鲨等凶猛的鲨鱼除外）。
+
+希望鲨鱼袭击人类事件可以逐渐消失，这不仅在保护我们自己，也在保护鲨鱼。因为每当有人类被杀害，人们往往会屠杀更多鲨鱼，既出于报复，可能也因为利益。鲨鱼并无意伤害人类，人类也要自己小心，善待鲨鱼，和谐共处！

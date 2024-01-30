@@ -1,0 +1,370 @@
+---
+title: "Exploring Trump World"
+author: "Keyi Li"
+date: "2023-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 背景信息
+
+Donald·J·Trump是美国第45任总统，也是极具争议和传奇色彩的人物。他毕业于宾夕法尼亚大学沃顿商学院，最先深耕于经济学领域，在金融尤其是房地产领域取得了卓越的成就，建立了庞大的商业帝国。特朗普塔、特朗普国际大厦等标志性建筑成为了他商业事业的象征。 同时，凭借商业上的成功，特朗普建立了庞大的社会关系网络，与各个领域的关键人物建立了深厚的联系。此后他逐渐转战政界，并于2015年宣布竞选总统。最终其凭借强大的社会资源和人脉，在2016年成功击败竞争对手希拉里赢得大选，也成为了继罗纳德·里根后第一位在未经过政治或军事背景的总统。
+
+对比美国历史，没有哪位美国总统上任时拥有像特朗普那样庞大的商业、投资和企业关系网络。他及家人和顾问接触了数量惊人的企业，从阿塞拜疆的一家酒店到拉斯维加斯的一家扑克公司。本次作业借助BuzzFeedNews上的调查数据，对特朗普的人脉关系网络做了一些分析和整理，以发现其特点，包括哪些人和特朗普的关系最亲近，抑或哪些组织或个人在特朗普的社交关系中处于核心的地位等等。
+
+### 数据基本介绍
+
+本次作业寻找的数据来自： BuzzFeed News（[https://www.buzzfeednews.com](https://www.buzzfeednews.com/）上的专题报道){.uri}）上的专题报告； 间接引自复杂网络索引网站ICON（<https://icon.colorado.edu/#!/networks>）
+
+数据由BuzzFeedNews网站记者从特朗普相关的公共记录、新闻报道和一些其他来源获收集并整理而成，共包括3379行。每一行代表一个人与一个组织（例如，The Trump Organization Inc. 和 Donald J. Trump）、一个人与另一个人（例如，Donald J. Trump 和 Linda McMahon）或两个组织（例如，Bedford Hills Corp. 和 Seven Springs LLC）之间的联系，同时文件也附上了每行数据的来源信息以便查证。 注：数据已附在链接https://drive.google.com/file/d/1Wprn5EbUy2e7wqtacDwbuTWeU026VFyB/view?usp=drive_link
+
+**导入数据**
+
+```{r}
+set.seed(42)
+data <- read.csv("C:\\Users\\33549\\Desktop\\41598_2011_BFsrep00196_MOESM2_ESM\\trumpworld.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+head(data,5)
+```
+
+```{r}
+#分析数据来源的情况
+data_counts <- table(data$Source.s.)
+
+# 将结果转换为数据框，按出现次数降序排序，并选择前五个元素
+data_counts_df <- data.frame(element = names(data_counts), count = as.numeric(data_counts))
+data_counts_df <- data_counts_df[order(-data_counts_df$count), ]
+total_websites <- nrow(data_counts_df)
+total_websites
+
+```
+
+```{r}
+top5_websites <- head(data_counts_df, 5)
+top5_websites
+```
+
+对数据来源做简单分析，可以发现数据共来源于710个网站，覆盖了政府网站、新闻网站、财务报告、舆论咨询等各类平台，呈现较强的多样性。其中，最多的信息来自Trump 2016年的财务报告，总共出现了898次，占比12.5%，其次的来源是政府商业平台以及Statis、Crunchbase等大型数据库。
+
+我进一步查询了Trump-2016-Financial-Disclosure的内容，发现其中涉及到较多的财务关联问题的调查及解释，包括了特朗普相关的企业和政府单位的财务报告和特朗普个人财产来源的描述，故其中包含大量特朗普社交网络的数据具有一定的合理性。此外其他大型数据库也包含了企业合作关系、所有权等内容，故其中也包括较多特朗普社交网络的数据。
+
+**但需要注意的是，本数据更新时间截至2017年，主要关注其上任时的社交关系，目的是让当时的人们对于新政府、新总统有更多的了解。特朗普在其上任后新建立的新社交网络，尤其是在某些著名社交平台（如脸书、推特）上进行的活动并未记录在内，即本项目只能分析特朗普上任时的社交情况，而不能作为其任期表现等后续情况的判断依据。**
+
+### 网络数据基本情况
+
+```{r}
+library(igraph)
+g <- graph.data.frame(data[,c(2,4)], directed = FALSE)
+```
+
+#### 节点和边数
+
+```{r}
+cat(paste0('网络的节点数为：', vcount(g)))
+cat(paste0('网络的边数为：', ecount(g)))
+```
+
+该网络数据共包含2668个节点，以及3379条连边。其中节点为特朗普相关的人或组织。他们可能是特朗普的家人朋友或者政治顾问，也可能是特朗普名下的企业或者资助他的财团，其具体关系在数据库中进行了标注。连边代表两者曾共同出现在一篇文章中，或者两者有其他公认的关系。
+
+```{r}
+paste0('网络的密度为：', graph.density(g)) 
+```
+
+网络的密度为0.56%，网络密度极低，属于典型的稀疏网络。
+
+#### 网络可视化
+
+```{r}
+set.seed(42)
+V(g)$label <- ifelse(V(g)$name == "DONALD J. TRUMP", "Trump", NA)
+V(g)$ver_size <- ifelse(V(g)$name == "DONALD J. TRUMP", 6, 3)
+plot(g, layout = layout_as_tree(g, circular = TRUE), vertex.size = V(g)$ver_size, edge.length = 50, vertex.label = V(g)$label, vertex.label.cex = 0.5, vertex.label.dist = 1)
+```
+
+直接对网络数据做可视化，采用树形布局-圆形排列，但因为节点和边数过多，无法清晰展现网络关系，但可以明显发现特朗普处于网络中心，周围呈现明显的环形分布，主要分为四圈，可以认为由内向外的个人/组织与特朗普的关系逐渐疏远。也有极少量数据分布在圈外，可以认为其与特朗普几乎没有关系。（因为根据六度分割理论，几乎所有人通过六个人的传递也可以和特朗普有相关性）。 此外，我曾尝试将不同的关系转化为不同的权重，但因为关系种类过于复杂，效果并不好，故最终仍采用无权重的无向图。
+
+### 网络的度及分析
+
+```{r}
+# 度的直方图
+hist(degree(g), ylab = "频数", xlab = "度", main = " ", col = "white")
+```
+
+对节点的度绘制直方图，发现数据呈现明显的右偏厚尾分布，大部分节点的度位于0-30的范围内，极少数节点的度可以达到800左右（可以猜测是代表特朗普的点）。以下我们对度较高的一些节点进行了进一步探索和分析。
+
+```{r}
+# 计算节点的度并储存为数据框
+degree <- data.frame(deg = degree(g)) 
+# 将节点的name新增为一列
+degree$name <- row.names(degree)
+# 按照degree降序排列
+degree <- degree[order(degree$deg, decreasing = T),]
+# 去掉行的索引
+row.names(degree) <- NULL
+# 打印前10行
+head(degree[,c('name','deg')], 10)
+```
+
+对节点度的情况进行分析发现，特朗普以757的度数遥遥领先，度最大的前十名除特朗普以外，个人占据六席，而组织占据三席。 在特朗普的社交网络中，其自身具有最多的度并不令人意外，对于其他度数较多的人物及组织，我通过查询相关资料，证实了他们确实和特朗普有密切的关系。
+
+a.  特朗普政府的商务部长**WILBUR ROSS**以157的度数排名第二，同时其也与特朗普有连边，说明其在特朗普的社交网络中占据关键地位。WILBUR早期在纽约市的一家投行工作，并于2000年创立了投资公司WL Ross & Co. LLC，专注于企业重组与产业投资，在房地产领域与特朗普曾有过多次合作。2016年起进入特朗普政府担任商务部长，支持特朗普政府的立场，推动了一系列贸易政策的制定。
+
+b.  财政部长**STEVEN MNUCHIN**以118的度数排名第三，同时他也是公认的特朗普社交网络中和核心成员。STEVEN早年在高盛工作，之后成立私人投资公司Dune Capital Management，主要涉及电影、房地产方面的投资，也因此与特朗普建立了一定的商业关系。此外，他还在特朗普的2016年总统竞选活动中担任了财政主管。他在竞选期间为特朗普筹集资金，并提供财务建议。这一参与使得他与特朗普的关系更加紧密。
+
+c.  组织方面，特朗普社交网络图中度数最大的组织为**Mar-a-Lago Club**，位于佛罗里达州棕榈滩市，是特朗普的私人度假胜地，被购买于1985年。他经常在这里度过冬季和周末，同时也将其用作会议和活动的场所，并在此主持了一系列社交活动，拓展了大量人脉。Mar-a-Lago Club是特朗普社交网络构建过程中极其重要的组织。
+
+d. **THRIVE CAPITAL**由特朗普的女婿兄弟乔舒亚·库斯纳等人于2009年创立，是一家科技和互联网行业的创投公司。它在商业和政治之间保持独立，投资决策主要基于商业前景和潜在回报。该公司之所以在特朗普的社交网络占据重要地位，主要因为它与特朗普的家族密切相关。同时，库斯纳的家族也有较高的政治地位，与特朗普在商界和政界的人脉都有密切的关系。
+
+此外，进一步汇总各节点度的特征，我们可以发现：特朗普对经济、商业等方面的关注要高于其他方面。在特朗普的社交网络中，出身于金融领域或具有商业背景的人物往往占据了关键位置（比如WILBUR、MNUCHIN），其社交网络中的企业绝大多数从事的也是投资业务。相比其他美国总统的社交网络，特朗普网络的商业属性极其明显，这也预示在之后的执政过程中，特朗普政府会重点关注经济层面的发展，将经济问题置于政策日程的前列，通过一系列措施来推动经济增长、刺激就业和改善商业环境。
+
+```{r}
+# 计数
+data_freq = data.frame(table(degree(g)))
+data_freq$Var1 = as.numeric(as.character(data_freq$Var1))
+# 绘图
+plot(log(as.numeric(data_freq$Var1)), log(data_freq$Freq), xlab = "对数-度", ylab = "对数-人数")
+```
+
+双对数图中散点近似形成一条斜率为负数的 直线，符合幂律分布。
+
+### 中心性分析
+
+因为度中心性已经在度的分析中涉及，该部分主要分析另外两类中心性，即中介中心性和接近中心性。
+
+#### 中介中心性
+
+```{r}
+# 计算节点的中介中心性并储存为数据框
+betweenness = data.frame(bet = betweenness(g, directed = F, normalized = T)) 
+# 将节点的name新增为一列
+betweenness$name = row.names(betweenness) 
+# 降序排列
+betweenness = betweenness[order(betweenness$bet, decreasing = T),]
+#展示
+head(betweenness, 10)
+```
+
+中介中心性是社交网络分析中的一种网络中心性度量，用于衡量一个节点在网络中充当信息传递或连接不同节点之间的桥梁的程度。中介中心性的核心思想是通过计算节点在网络中的最短路径上所占的比例来度量其重要性。
+
+对中介中心性的分析表明，特朗普是当之无愧的中心，占据0.94的中心性，之后的人物/组织与之前度分析时的排序类似，但出现了一个新名字**JARED KUSHNER**。尽管其度较小（排名仅为第十三位），但其却具有0.10的较高中心性，表明他在特朗普的社交网络中也位于核心。
+
+JARED是特朗普的女婿，也是THRIVE CAPITAL创始人的兄弟，其家族有着深厚的政治背景。同时他也是一位活跃的房地产投资者，创立了在线房地产投资平台Cadre。JARED在特朗普 2016 年总统竞选中发挥了重要作用，并一度被视为事实上的竞选经理，此后他一直担任特朗普的高级顾问，参与了一系列政策和决策。
+
+#### 接近中心性
+
+```{r}
+# 计算节点的接近中心性并储存为数据框
+closeness_df <- data.frame(close = closeness(g, normalized = TRUE)) 
+# 将节点的name新增为一列
+closeness_df$name <- row.names(closeness_df) 
+# 降序排列
+closeness_df <- closeness_df[order(closeness_df$close, decreasing = TRUE),]
+# 展示前10行
+head(closeness_df, 10)
+
+```
+
+接近中心性是社交网络分析中用于度量节点到其他节点的平均最短路径长度的指标。一个节点的接近中心性越高，表示它与其他节点的距离越短，更容易在网络中迅速传播信息或影响。接近中心性分布较均匀，可能因为该网络路径相对短且简单。
+
+### 核心子图提取
+
+```{r}
+W = as_adjacency_matrix(g)
+
+# 将"dgCMatrix"类型转化为"matrix"类型
+W = as.matrix(W)                  
+
+
+# 提取核心网络
+converg = FALSE
+old.nrow = nrow(W)
+
+while(!converg){
+  # 计算W矩阵的列和
+  d = colSums(W)
+  to.keep = which(d >= 3)
+  # 保留列和大于等于3的列
+  if(old.nrow == length(to.keep)){
+    converg = TRUE
+  }
+  old.nrow = length(to.keep)
+  W = W[to.keep,to.keep]
+}
+
+g_core = graph_from_adjacency_matrix(W, mode = "undirected")
+
+# 计算核心网络的节点数
+print(paste0('核心网络的节点数为：',vcount(g_core)))
+print(paste0('核心网络的边数为：', ecount(g_core)))
+print(paste0('核心网络的密度为：', graph.density(g_core)))
+```
+
+**可视化**
+
+```{r}
+set.seed(42)
+V(g_core)$label <- ifelse(V(g_core)$name == "DONALD J. TRUMP", "Trump", NA)
+V(g_core)$ver_size <- ifelse(V(g_core)$name == "DONALD J. TRUMP", 10, 5)
+V(g_core)$ver_col <- ifelse(V(g_core)$name == "DONALD J. TRUMP", 'red', 'orange')
+plot(g_core, layout = layout_with_kk, vertex.size = V(g_core)$ver_size, edge.length = 30, vertex.label = V(g_core)$label,vertex.color = V(g_core)$ver_col, vertex.label.cex = 0.6, vertex.label.color = 'black' , vertex.label.dist = 1.1)
+```
+
+### 社区发现
+
+#### Multilevel算法及结果分析
+
+```{r}
+# 设置随机种子
+set.seed(42)
+# 使用multilevel.community函数对核心网络进行社区划分
+com <- multilevel.community(g_core)    
+# 展示每个社区的大小 
+table(com$membership)    
+# 为节点添加社区属性
+V(g_core)$com = com$membership
+# 绘制
+# 使用 rainbow 函数生成 10 种颜色
+com_color <- rainbow(10)
+
+important_nodes <- head(degree[, 2], 13)
+# 创建逻辑向量，表示哪些节点是重要节点
+is_important <- V(g_core)$name %in% important_nodes
+
+V(g_core)$size=seq(5,15,length.out = max(degree(g_core)))[degree(g_core)]
+plot(g_core,
+     # 力导向布局
+     layout = layout.fruchterman.reingold,
+     # 设置节点大小
+     vertex.size = V(g_core)$size,
+     # 设置节点颜色
+     vertex.color = com_color[V(g_core)$com],
+     # 设置节点边框颜色
+     vertex.frame.color = 'grey50',
+     edge.length = 20,
+     vertex.label = ifelse(is_important, V(g_core)$name, NA),
+     vertex.label.cex=0.5
+     )
+
+# 设置随机种子
+set.seed(42)
+gn = graph.neighborhood(g, order = 1)
+# 展示前20个节点邻域的子图节点个数
+sapply(gn, vcount)[1:20]
+
+```
+
+**结果分析：**
+
+我们将核心网络划分为9个社区，根据社区中人物信息可以对社区类型进行推断，以下介绍其中一些主要的社区特点和构成：
+
+a. 黄绿色社区是人数最多的社区，也是特朗普所在的社区，该社区包括了特朗普的主要家庭成员（如IVANKA TRUMP）以及其名下核心企业（如Trump Organization、MAR-A-LAG cLUB），以及政府核心人员，该社区可以称为特朗普社交网络的“大本营”，或者叫“核心社区”；
+
+b. 红色区域代表特朗普名下较小的企业或合作企业，如Trump Post Office、Trump Ruffin，为“小企业社区”。
+浅蓝色区域主要为特朗普女婿KUSHNER家族的成员及下属公司，包括他们拥有的政治人脉，代表人物有JARED KUSHNER、Joshua Kushner及其创立的公司Thrive，可以把该社区称作“亲家社区”。 Capital。
+
+c. 橙色社区是以梅瑟家族为代表的一些大型家族企业，他们支持保守派和右翼组织，对于特朗普政府有大额的政治捐献，这一部分可称为“贵族社区”。
+
+d. 深绿色社区是以特朗普政府交通部长
+Elaine Chao为核心的小型网络，我认为该社区划分不恰当，更应该归于黄绿色网络。
+
+e. 紫色社区的核心是特朗普竞选团队的法律实体——DONALD TRUMP FOR PRESIDENT INC，是一个注册的政治委员会，社区成员皆隶属于该委员会。该社区可称作“政治委员会社区”。
+
+f. 浅绿色社区主要包括了一些媒体或数字营销的机构和人员，包括Cambridge Analytica等组织以及Alexander Nix等人员，该社区为“数字媒体与宣传社区”。
+
+
+**动态交互网络**
+```{r}
+# 设置随机种子
+set.seed(42)
+# 使用multilevel.community函数对核心网络进行社区划分
+com <- multilevel.community(g_core)   
+library(networkD3)
+g_D3 = igraph_to_networkD3(g_core, group = membership(com))
+# 设置节点大小
+g_D3$nodes$Nodesize = seq(5,15,length.out = max(degree(g_core)))[degree(g_core)]
+# 指定点击事件
+script = 'alert("name: " + d.name + ", group: " + d.group + ", size: " + d.nodesize)'
+# 绘图
+network = forceNetwork(# 添加节点
+                        Nodes = g_D3$nodes,
+                        # 添加连边
+                        Links = g_D3$links,
+                        # 设置节点大小
+                        Nodesize = "Nodesize",
+                        # 设置节点标签
+                        NodeID = "name",
+                        # 设置节点社区
+                        Group = "group",
+                        # 设置节点的透明度
+                        opacity = 0.9,
+                        # 设置标签字体
+                        fontFamily = "Times New Roman",
+                        # 设置标签字体大小
+                        fontSize = 15,
+                        # 设置连边颜色
+                        linkColour = "grey",
+                        # 设置颜色
+                        colourScale = JS("d3.scaleOrdinal(d3.schemeCategory20);"),
+                        # 设置节点半径计算方式
+                        radiusCalculation = "d.nodesize",
+                        # 设置点击事件
+                        clickAction = script,
+                        # 设置是否可以缩放
+                        zoom = TRUE)
+# 展示动态交互网络
+network
+
+```
+
+#### 各类算法对比
+
+**Fast Greedy**
+
+```{r}
+set.seed(25)
+cfg = cluster_fast_greedy(g_core)
+plot(cfg,g_core,vertex.label = NA,vertex.size = 5,edge.length = 20, layout = layout_with_kk)
+
+```
+
+**Label propagation**
+
+```{r}
+set.seed(15)
+clp=cluster_label_prop(g_core)
+plot(cfg,g_core,vertex.label = NA,vertex.size = 5,edge.length = 20, layout = layout_nicely)
+
+```
+
+**Walktrap**
+
+```{r}
+set.seed(1)
+cfg=cluster_walktrap(g_core)
+plot(cfg,g_core,vertex.label = NA,vertex.size = 5,edge.length = 20, layout = layout_nicely)
+
+```
+
+**Spinglass**
+
+```{r}
+set.seed(10)
+cfg=cluster_spinglass(g_core)
+plot(cfg,g_core,vertex.label = NA,vertex.size = 5,edge.length = 20, layout = layout_with_kk)
+
+```
+
+以上对比了Fast Greedy、Label propagation、Walktrap、Spinglass四类算法，并对于每种办法调整了seed和layout。从视觉效果来看，Walktrap算法表现最差，主要由于分类数量过多且图形呈现较为混乱。而Fast Greedy和Label propagation算法都有不错的表现，它们均划分了七个社区，且社区划分较为清晰。
+
+
+### 总结
+
+通过网络数据分析和社区发现，我们可以看到，特朗普不仅具有雄厚的家族背景，也得到了商业、政界各企业的帮助，同时也获得了其女婿的家族以及一些贵族家庭的支持和援助，同时他组建的政治委员会、他的顾问团队也帮助他拓展了更广阔的的人脉，形成了这张巨型的人脉网。由此可见，特朗普的当选并不是偶然，他虽然被称为“黑马”，但“黑马”本身也代表其具有强大的实力和充分的竞选资本。
+
+最后，欢迎参观Trump World！之后有机会我可以收集Trump卸任时的数据，分析社交网络的变化，相信可以得到更多好玩的发现！
+
+感谢批阅！
+
+李柯毅 2100012618
